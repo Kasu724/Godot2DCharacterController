@@ -1,5 +1,6 @@
 # Godot 4 2D Platformer Character Controller
 A ready-to-use script for a platformer character controller using GDScript in Godot 4; All functionalities and abilities are adjustable and/or toggleable within the `PlayerMovement.gd` script.
+Play it on itch.io: [Godot 2D Character Controller](https://kasu724.itch.io/godot-2d-character-controller)
 
 ## Controls:
 - Move Left: `A`
