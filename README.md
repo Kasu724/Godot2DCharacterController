@@ -6,7 +6,7 @@ A ready-to-use script for a platformer character controller using GDScript in Go
 - Move Right: `D`
 - Jump: `Space`
 - Crouch: `S`
-- Dash and Roll: `Shift`
+- Dash and Roll: `Tab` or `Shift`
   
 ## Horizontal Movement
 - **Crouching**: make your hitbox smaller and fit under small spaces
