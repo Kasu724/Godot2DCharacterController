@@ -12,10 +12,11 @@ A ready-to-use script for a platformer character controller using GDScript in Go
 - **Crouching**: make your hitbox smaller and fit under small spaces
 - **Acceleration**: it takes some time to reach your max speed
 - **Deceleration**: it takes some time to slow to a stop
-- **Dash**: when in the air or on the ground, perform a short, but fast dash forwards
+- **Dash**: when on the ground, perform a short, but fast dash forwards; when in the air dash is replenished by every jump
 - **Roll**: when crouching on the ground, roll forwards
 
 ## Vertical Movement
+- **Double Jump**: jump once on the ground and again in the air; allows you to dash twice in the air
 - **Variable Jump**: jump higher or lower depending on how long you press the jump button
 - **Fall Multiplier**: stronger gravity when falling
 - **Low Jump Multiplier**: stronger gravity when the jump button is released
