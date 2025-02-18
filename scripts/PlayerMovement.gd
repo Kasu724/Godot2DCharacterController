@@ -3,82 +3,109 @@ extends CharacterBody2D
 @export_category("Player Stuffs")
 
 @export_group("Toggles")
-@export var can_crouch = true
-@export var can_dash = true  # Toggle for dash ability
-@export var can_double_jump = true  # Toggle for double jump ability
-@export var can_wall_jump = true  # Toggle for wall jump ability
+@export var can_crouch := true
+@export var can_dash := true
+@export var can_double_jump := true
+@export var can_wall_jump := true
 
 @export_group("Horizontal")
-@export var BASE_SPEED = 200.0
-@export var ACCELERATION = 1500.0
-@export var DECELERATION = 2000.0
+@export var BASE_SPEED := 225.0
+@export var ACCELERATION := 1500.0
+@export var DECELERATION := 2000.0
 
 @export_group("Vertical")
-@export var JUMP_VELOCITY = -250.0
-@export var VARIABLE_JUMP_MULTIPLIER = 0.5  # Adjust this value to control the variable jump height effect
-@export var FALL_MULTIPLIER = 1.0  # Stronger gravity when falling
-@export var LOW_JUMP_MULTIPLIER = 2.0  # Stronger gravity when jump button is released early
-@export var COYOTE_TIME = 0.1  # Time after leaving the ground that the player can still jump
-@export var JUMP_BUFFER_TIME = 0.15  # Time for jump buffering
+@export var JUMP_VELOCITY := -500.0
+@export var VARIABLE_JUMP_MULTIPLIER := 1.75
+@export var FALL_MULTIPLIER := 1.0
+@export var LOW_JUMP_MULTIPLIER := 3.5
+@export var COYOTE_TIME := 0.1
+@export var JUMP_BUFFER_TIME := 0.15
 
 @export_group("Wall")
-@export var WALL_JUMP_VELOCITY = Vector2(100, JUMP_VELOCITY)  # Horizontal and vertical velocities for wall jump
-@export var WALL_SLIDE_SPEED = 50.0  # Speed at which the player slides down the wall
-@export var WALL_JUMPING_DURATION = 0.15 # Time that player will be wall jumping
+@export var WALL_JUMP_VELOCITY := Vector2(180, -400)
+@export var WALL_SLIDE_SPEED := 50.0
+@export var WALL_JUMPING_DURATION := 0.15
 
 @export_group("Other")
-@export var DASH_SPEED = 500.0  # Speed during dash
-@export var DASH_DURATION = 0.15  # Duration of the dash in seconds
-@export var ROLL_SPEED = 300.0 # Speed during roll
-@export var LAND_TIME = 0.2 # Time it takes to land
-@export var CROUCHING_POSITION = Vector2(0, 7)
+@export var DASH_SPEED := 500.0
+@export var DASH_DURATION := 0.15
+@export var ROLL_SPEED := 300.0
+@export var LAND_TIME := 0.2
+@export var CROUCHING_POSITION := Vector2(0, 7)
+@export var PUSH_FORCE := 80.0
 
-var direction
-var is_crouching = false
-var is_wall_sliding = false
-var is_wall_jumping = false
-var has_double_jumped = false
-var is_dashing = false
-var dash_again = false
-var is_landing = false
-var was_on_floor = false
-var dash_timer = 0.0
-var speed = 0.0
-var wall_jumping_timer = 0.0
-var coyote_timer = 0.0
-var jump_buffer_timer = 0.0
-var landing_timer = 0.0
+@onready var animated_sprite := $AnimatedSprite2D
+@onready var collision_shape := $CollisionShape2D
+@onready var crouch_rc1 := $"RayCast2D 1"
+@onready var crouch_rc2 := $"RayCast2D 2"
 
-# Get the gravity from the project settings to be synced with RigidBody nodes.
+var direction : float
+var is_crouching := false
+var is_wall_sliding := false
+var is_wall_jumping := false
+var has_double_jumped := false
+var is_dashing := false
+var is_landing := false
+var dash_timer := 0.0
+var speed := 0.0
+var wall_jumping_timer := 0.0
+var coyote_timer := 0.0
+var jump_buffer_timer := 0.0
+var landing_timer := 0.0
+var c : KinematicCollision2D
+
 var gravity = ProjectSettings.get_setting("physics/2d/default_gravity")
 
-@onready var animated_sprite = $AnimatedSprite2D
-@onready var collision_shape = $CollisionShape2D
-@onready var crouch_rc1 = $"RayCast2D 1"
-@onready var crouch_rc2 = $"RayCast2D 2"
-
-var standing_shape
-var crouching_shape = RectangleShape2D.new() # Create a new shape for crouching
-var standing_position
-var crouching_position
+var standing_shape : RectangleShape2D
+var crouching_shape := RectangleShape2D.new()
+var standing_position : Vector2
+var crouching_position : Vector2
+var was_on_floor = false
 
 func _ready():
-	# Initialize shapes and positions for standing and crouching collisions
+	initialize_shapes()
+
+func _physics_process(delta):
+	
+	update_floor_status()
+	update_input_direction()
+	handle_crouch()
+	handle_dash(delta)
+	
+	handle_wall_jump_state(delta)
+	update_coyote_timer(delta)
+	update_jump_buffer(delta)
+	update_landing_timer(delta)
+	handle_wall_slide()
+	apply_gravity(delta)
+	handle_jump()
+	apply_variable_jump(delta)
+	update_velocity(delta)
+	
+	move_and_slide()
+	handle_collisions()
+	handle_landing_detection()
+	
+	play_animations()
+
+func initialize_shapes():
 	standing_shape = collision_shape.shape.duplicate()
 	crouching_shape.extents = Vector2(standing_shape.extents.x, standing_shape.extents.y / 2)
 	standing_position = collision_shape.position
 	crouching_position = CROUCHING_POSITION
 
-func _physics_process(delta):
-	
-	# Floor check
-	var was_on_floor_prev = was_on_floor
+func update_floor_status():
 	was_on_floor = is_on_floor()
+
+func update_input_direction():
+	if is_wall_jumping and not is_dashing:
+		return
 	
-	# Get the input direction: -1, 0, 1
 	direction = Input.get_axis("move_left", "move_right")
-	
-	# Handle crouching
+	if direction != 0 and not is_wall_sliding:
+		animated_sprite.flip_h = direction < 0
+
+func handle_crouch():
 	if can_crouch and Input.is_action_pressed("crouch") and is_on_floor():
 		is_crouching = true
 		collision_shape.shape = crouching_shape
@@ -87,132 +114,121 @@ func _physics_process(delta):
 		is_crouching = false
 		collision_shape.shape = standing_shape
 		collision_shape.position = standing_position
-	
-	# Handle dash timer and dash canceling
+
+func handle_dash(delta):
 	if is_dashing:
 		dash_timer -= delta
-		if dash_timer <= 0:
+		# Check if the player has changed direction during the dash
+		if direction != 0 and direction != sign(velocity.x):
 			is_dashing = false
-		elif direction != 0 and direction != sign(velocity.x):
-			# Cancel dash if the player presses the opposite direction
+			velocity.x = 0
+		elif dash_timer <= 0:
 			is_dashing = false
-			velocity.x = 0  # Stop horizontal movement
+			velocity.x = move_toward(velocity.x, 0, DECELERATION * delta)
+	else:
+		if can_dash and Input.is_action_just_pressed("dash") and not is_wall_sliding and not is_dashing:
+			start_dash()
 
-	# Handle dash input
-	if can_dash and Input.is_action_just_pressed("dash") and not is_wall_sliding and not is_dashing:
-		is_dashing = true
-		dash_timer = DASH_DURATION
-		can_dash = false  # Disable dash until the player jumps again
-		if direction != 0:
-			if is_crouching:
-				velocity.x = direction * ROLL_SPEED
-			else:
-				velocity.x = direction * DASH_SPEED
-		else:
-			# Dash in the current facing direction if no input direction
-			if is_crouching:
-				velocity.x = ROLL_SPEED if not animated_sprite.flip_h else -ROLL_SPEED
-			else:
-				velocity.x = DASH_SPEED if not animated_sprite.flip_h else -DASH_SPEED
+func start_dash():
+	is_dashing = true
+	dash_timer = DASH_DURATION
+	can_dash = false
+	
+	var dash_direction = direction
+	if dash_direction == 0:
+		dash_direction = -1 if animated_sprite.flip_h else 1  # Default to sprite's facing direction
+	
+	velocity.x = dash_direction * (ROLL_SPEED if is_crouching else DASH_SPEED)
 
-	# Reset wall slide and wall jump state
-	is_wall_sliding = false
+func handle_wall_jump_state(delta):
 	if is_wall_jumping:
 		wall_jumping_timer -= delta
 	if wall_jumping_timer <= 0:
 		is_wall_jumping = false
 		wall_jumping_timer = WALL_JUMPING_DURATION
-	
-	# Update coyote timer and double jump
+
+func update_coyote_timer(delta):
 	if is_on_floor():
 		coyote_timer = COYOTE_TIME
-		has_double_jumped = false  # Reset double jump when on the floor
-		can_dash = true  # Reset dash when on the floor
+		has_double_jumped = false
+		can_dash = true
 	else:
 		coyote_timer -= delta
 
-	# Update jump buffer timer
+func update_jump_buffer(delta):
 	if jump_buffer_timer > 0:
 		jump_buffer_timer -= delta
-	
-	# Update landing timer
+
+func update_landing_timer(delta):
 	if is_landing:
 		landing_timer -= delta
 		if landing_timer <= 0:
 			is_landing = false
-	
-	# Check for wall sliding
-	if can_wall_jump and not is_on_floor() and is_on_wall() and direction != 0:
-		if velocity.y > 0:
-			velocity.y = WALL_SLIDE_SPEED
-			is_wall_sliding = true
 
-	# Add the gravity if not wall sliding
+func handle_wall_slide():
+	is_wall_sliding = can_wall_jump and not is_on_floor() and is_on_wall() and direction != 0 and velocity.y > 0
+	if is_wall_sliding:
+		velocity.y = WALL_SLIDE_SPEED
+
+func apply_gravity(delta):
 	if not is_on_floor() and not is_wall_sliding:
 		velocity.y += gravity * delta
 
-	# Handle jump input and buffering
+func handle_jump():
 	if Input.is_action_just_pressed("jump") and not crouch_rc1.is_colliding() and not crouch_rc2.is_colliding():
 		jump_buffer_timer = JUMP_BUFFER_TIME
-		
-	# Handle jump.
+
 	if jump_buffer_timer > 0:
 		if is_on_floor() or coyote_timer > 0:
-			velocity.y = JUMP_VELOCITY
-			coyote_timer = 0  # Reset coyote timer after jumping
-			jump_buffer_timer = 0  # Reset jump buffer timer after jumping
-			can_dash = true  # Reset dash after jumping
+			perform_jump()
 		elif can_wall_jump and is_wall_sliding:
-			is_wall_jumping = true
-			if animated_sprite.flip_h:  # Facing left wall
-				velocity = Vector2(WALL_JUMP_VELOCITY.x, WALL_JUMP_VELOCITY.y)
-				animated_sprite.flip_h = false
-			else:  # Facing right wall
-				velocity = Vector2(-WALL_JUMP_VELOCITY.x, WALL_JUMP_VELOCITY.y)
-				animated_sprite.flip_h = true
-			jump_buffer_timer = 0  # Reset jump buffer timer after wall jumping
-			has_double_jumped = false  # Reset double jump after wall jump
-			can_dash = true  # Reset dash after wall jumping
+			perform_wall_jump()
 		elif can_double_jump and not has_double_jumped:
-			velocity.y = JUMP_VELOCITY
-			has_double_jumped = true  # Set double jump to true after using it
-			jump_buffer_timer = 0  # Reset jump buffer timer after double jumping
-			can_dash = true  # Reset dash after double jumping
-	
-	# Implement variable jump height and snappy fall
-	if velocity.y < 0:  # Player is going upwards
-		if Input.is_action_pressed("jump"):
-			velocity.y += gravity * (VARIABLE_JUMP_MULTIPLIER - 1) * delta
-		else:
-			velocity.y += gravity * (LOW_JUMP_MULTIPLIER - 1) * delta
-	elif velocity.y > 0:  # Player is falling
+			perform_double_jump()
+
+func perform_jump():
+	velocity.y = JUMP_VELOCITY
+	reset_jump_timers()
+
+func perform_wall_jump():
+	is_wall_jumping = true
+	velocity = Vector2(WALL_JUMP_VELOCITY.x if animated_sprite.flip_h else -WALL_JUMP_VELOCITY.x, WALL_JUMP_VELOCITY.y)
+	reset_jump_timers()
+	animated_sprite.flip_h = not animated_sprite.flip_h
+
+func perform_double_jump():
+	velocity.y = JUMP_VELOCITY
+	has_double_jumped = true
+	reset_jump_timers()
+
+func reset_jump_timers():
+	jump_buffer_timer = 0
+	coyote_timer = 0
+	can_dash = true
+
+func apply_variable_jump(delta):
+	if velocity.y < 0:
+		velocity.y += gravity * ((VARIABLE_JUMP_MULTIPLIER if Input.is_action_pressed("jump") else LOW_JUMP_MULTIPLIER) - 1) * delta
+	elif velocity.y > 0:
 		velocity.y += gravity * (FALL_MULTIPLIER - 1) * delta
-	
-	# Flip the Sprite
-	if direction > 0:
-		animated_sprite.flip_h = false
-	elif direction < 0:
-		animated_sprite.flip_h = true
-	
-	# Apply movement
-	speed = BASE_SPEED
-	if is_crouching:
-		speed *= 0.5
 
+func update_velocity(delta):
+	speed = BASE_SPEED * (0.5 if is_crouching else 1.0)
 	if not is_wall_jumping and not is_dashing:
-		if direction:
-			velocity.x = move_toward(velocity.x, direction * speed, ACCELERATION * delta)
-		else:
-			velocity.x = move_toward(velocity.x, 0, DECELERATION * delta)
-	
-	move_and_slide()
+		velocity.x = move_toward(velocity.x, direction * speed if direction != 0.0 else 0.0, (ACCELERATION if direction != 0.0 else DECELERATION) * delta)
 
-	# Handle landing detection
-	if was_on_floor_prev != is_on_floor() and is_on_floor():
+func handle_collisions():
+	for i in get_slide_collision_count():
+		c = get_slide_collision(i)
+		if c.get_collider() is RigidBody2D:
+			c.get_collider().apply_central_impulse(-c.get_normal() * PUSH_FORCE)
+	
+func handle_landing_detection():
+	if was_on_floor != is_on_floor() and is_on_floor():
 		is_landing = true
 		landing_timer = LAND_TIME
 
-	# Play animations
+func play_animations():
 	if is_dashing:
 		if is_crouching:
 			animated_sprite.play("roll")
