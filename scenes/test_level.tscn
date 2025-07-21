@@ -223,8 +223,8 @@ tracks/0/keys = {
 
 [sub_resource type="AnimationLibrary" id="AnimationLibrary_ex0ob"]
 _data = {
-"RESET": SubResource("Animation_vufks"),
-"move": SubResource("Animation_qbflc")
+&"RESET": SubResource("Animation_vufks"),
+&"move": SubResource("Animation_qbflc")
 }
 
 [node name="Test Level" type="Node"]
@@ -277,7 +277,7 @@ position = Vector2(344, -103.5)
 
 [node name="AnimationPlayer" type="AnimationPlayer" parent="Platforms/Platform1"]
 libraries = {
-"": SubResource("AnimationLibrary_ex0ob")
+&"": SubResource("AnimationLibrary_ex0ob")
 }
 autoplay = "move"
 
